@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "game": "The Legend of Zelda: Link's Awakening",
+    "version": "1.0",
+    "region": "USA"
+  },
+  "memory_map": {
+    "character": {
+      "health": {
+        "current": 0xDB5A,
+        "max": 0xDB5B
+      },
+      "position": {
+        "dungeon": 0xDBAE
+      }
+    },
+    "inventory": {
+      "items": {
+        "base": 0xDB02,
+        "count": 10
+      },
+      "keys": 0xDBD0,
+      "arrows": 0xDB45,
+      "bombs": 0xDB4D,
+      "magic_powder": 0xDB4C,
+      "seashells": 0xDB0F,
+      "leaves": 0xDB15
+    },
+    "progress": {
+      "instruments": {
+        "base": 0xDB65,
+        "count": 8
+      },
+      "map": {
+        "base": 0xD800,
+        "size": 256
+      }
+    },
+    "currency": {
+      "rupees": {
+        "high": 0xDB5D,
+        "low": 0xDB5E
+      }
+    }
+  },
+  "reward_config": {
+    "health": {
+      "penalty_per_loss": -1.0,
+      "bonus_per_gain": 0.5
+    },
+    "exploration": {
+      "new_area": 2.0,
+      "revisit_penalty": -0.1
+    },
+    "collection": {
+      "rupee": 0.1,
+      "key": 1.5,
+      "seashell": 3.0,
+      "leaf": 2.0
+    },
+    "combat": {
+      "enemy_defeated": 1.0,
+      "damage_taken": -0.5
+    },
+    "progress": {
+      "instrument_obtained": 10.0,
+      "dungeon_cleared": 20.0
+    }
+  }
+}
