@@ -9,6 +9,10 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 
+# 绘制学习曲线
+import matplotlib.pyplot as plt
+from stable_baselines3.common.callbacks import BaseCallback
+
 #actions = ["", "a", "b", "left", "right", "up", "down", "start", "select"]
 
 
@@ -25,8 +29,8 @@ NORMALIZE_ADVADTAGE = False
 """
 游戏ROM、STATE地址
 """
-ROM_PATH = "Link's awakening.gb"
-STATE_PATH = "Link's awakening.gb.state"
+ROM_PATH = "game_state/Link's awakening.gb"
+STATE_PATH = "game_state/Link's awakening.gb.state"
 
 actions = ["","a","b","left","right","up","down"]
 #actions = ["","left","right","up","down"]
@@ -38,7 +42,7 @@ class ZeldaPyBoyEnv(gym.Env):
         """
         self.flag = True
         """
-        设置station标志游戏进行的阶段，激活不同的奖励函数
+        设置station标志游戏进行的阶段 来激活不同的奖励函数
         """
         self.station = 0
         super().__init__()
@@ -88,9 +92,6 @@ class ZeldaPyBoyEnv(gym.Env):
             此时需要让ai前往按钮位置
             """
             reward += (- a + current_a)/10
-            if action == 'b' or action == 'a':
-                reward -= 0.001
-            
             """
             新增阶段性奖励
             """
@@ -98,29 +99,25 @@ class ZeldaPyBoyEnv(gym.Env):
                 if(y < 40):
                     reward += (- b + current_b)/10
                 if(abs(x - 125) < 5 and abs(y - 80) < 10):
-                    reward += 100
+                    reward += 1000
                     self.station = 1
-                reward += (200 - (abs(x -125) + abs(y - 80)))/ 10000
+                reward += (200 - (abs(x -125) + abs(y - 80)))/ 100
             elif self.station == 1:
                 if (abs(x - 125) < 10 and abs(y - 10) < 10):
-                    reward += 100
+                    reward += 1000
                     self.station = 2
-                reward += (200 - (abs(x -125) + abs(y - 10)))/ 10000
+                reward += (200 - (abs(x -125) + abs(y - 10)))/ 100
                             
         else:
             reward += (- b + current_b)/10
-            #reward += (- a + current_a)/20
-
-        reward -= (current_health - self.pyboy.memory[0xDB5A]) / 8
-
-        reward += 0.005
-
-        #if action == 'b' or action == 'a':
-            #reward -= 0.001
+        
+        # 对于扣血操作加以惩罚
+        new_health = self.pyboy.memory[0xDB5A]
+        reward -= (current_health - new_health) * 0.01
 
         # 判断游戏是否结束
         done = self.game_over()
-       
+
         observation = self._get_observation()
 
         return observation, reward, done, False, {}
@@ -160,7 +157,7 @@ class ZeldaPyBoyEnv(gym.Env):
         x,y = self.get_position()
         if(abs(x - 80) < 5 and abs(y - 45) < 5 and self.flag):
             self.flag = False
-            reward += 1000
+            reward += 2000
         
         distance_one, distance_two = self.get_distance()
 
@@ -168,7 +165,7 @@ class ZeldaPyBoyEnv(gym.Env):
             reward -= 1
         
         if(self.pyboy.memory[0xDBD0] == 1):
-            reward += 1000
+            reward += 2000
         return reward
 
     def _get_observation(self):
@@ -203,6 +200,36 @@ class ZeldaPyBoyEnv(gym.Env):
             self.pyboy.render_screen()
     
 
+# 自定义回调函数用于记录 reward
+class RewardLoggerCallback(BaseCallback):
+    def __init__(self):
+        super().__init__()
+        self.episode_rewards = []
+        self.episode_reward = 0
+
+    def _on_step(self) -> bool:
+        # 每一步累加 reward
+        reward = self.locals["rewards"][0]
+        self.episode_reward += reward
+
+        done = self.locals["dones"][0]
+        if done:
+            self.episode_rewards.append(self.episode_reward)
+            self.episode_reward = 0
+        return True
+
+def plot_rewards(rewards):
+    plt.figure(figsize=(12, 6))
+    plt.plot(rewards, label='Episode Reward')
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.title("Zelda PPO Training Reward Curve")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("reward_curve.png") 
+    plt.show()
+
 # 运行测试，先测试随机策略下环境能否正常运行
 """
 if __name__ == "__main__":
@@ -226,20 +253,26 @@ def train():
     """
     防止AI陷入无意义行动中增加最大步数限制
     """
-    env = TimeLimit(ZeldaPyBoyEnv(ROM_PATH, STATE_PATH), max_episode_steps=4000)
+    env = TimeLimit(ZeldaPyBoyEnv(ROM_PATH, STATE_PATH), max_episode_steps=2000)
 
     env = Monitor(env)
     model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_zelda/", device='cpu')
-    model.learn(total_timesteps=1000000)
+    # 创建 reward 日志器
+    reward_callback = RewardLoggerCallback()
+    # 训练
+    model.learn(total_timesteps=100000, callback=reward_callback)
+    # 绘图
+    plot_rewards(reward_callback.episode_rewards)
+
     mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, deterministic=True)
     print(f"Mean reward: {mean_reward}, Std: {std_reward}")
 
-    model.save("ppo_zelda")
+    model.save("RL_model/ppo_zelda")
 
 # 测试函数
 def test():
     env = ZeldaPyBoyEnv(ROM_PATH, STATE_PATH)
-    model = PPO.load("ppo_zelda.zip", env=env)
+    model = PPO.load("RL_model/ppo_zelda.zip", env=env)
 
     done = False
     obs, _ = env.reset()
@@ -251,5 +284,5 @@ def test():
     env.close()
 
 if __name__ == "__main__":
-    #train()
-    test()
+    train()
+    #test()
