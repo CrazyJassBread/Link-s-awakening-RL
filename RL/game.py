@@ -2,8 +2,8 @@ import io
 import keyboard
 from pyboy import PyBoy
 
-pyboy = PyBoy("Link's awakening.gb")
-save_file = "Link's awakening.gb.state"
+pyboy = PyBoy("game_state\Link's awakening.gb")
+save_file = "game_state\Link's awakening.gb.state"
 
 try:
     with open(save_file, "rb") as f:

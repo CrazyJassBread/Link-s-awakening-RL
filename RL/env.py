@@ -13,8 +13,9 @@ from stable_baselines3.common.monitor import Monitor
 import matplotlib.pyplot as plt
 from stable_baselines3.common.callbacks import BaseCallback
 
-#actions = ["", "a", "b", "left", "right", "up", "down", "start", "select"]
-
+# 禁用声音输出
+import os
+os.environ["SDL_AUDIODRIVER"] = "dummy"  # 禁用声音输出
 
 DEBUG = False
 
@@ -33,7 +34,6 @@ ROM_PATH = "game_state/Link's awakening.gb"
 STATE_PATH = "game_state/Link's awakening.gb.state"
 
 actions = ["","a","b","left","right","up","down"]
-#actions = ["","left","right","up","down"]
 class ZeldaPyBoyEnv(gym.Env):
     def __init__(self, rom_path, state_path):
         self.debug = DEBUG
@@ -45,8 +45,14 @@ class ZeldaPyBoyEnv(gym.Env):
         设置station标志游戏进行的阶段 来激活不同的奖励函数
         """
         self.station = 0
+        """
+        设置room参数 判断ai当前的房间位置
+        """
+        self.room = True
+        # 打印奖励
+        self.count = 0
+        # 初始化环境
         super().__init__()
-        # 初始化PyBoy环境
         self.pyboy = PyBoy(rom_path, sound=False)
         if state_path:
             with open(state_path, "rb") as f:
@@ -64,56 +70,103 @@ class ZeldaPyBoyEnv(gym.Env):
         self.observation_space = spaces.Box(low=0, high=255, shape=(screen_shape[0],screen_shape[1]), dtype=np.uint8)
         
     def step(self, action):
+        self.count += 1
         # 执行动作，动作选择来自action参数
+
         assert self.action_space.contains(action), "Invalid action!"
         current_health = self.pyboy.memory[0xDB5A]
-        current_a,current_b = self.get_distance()
+        """
+        通过station的数值判断当前阶段，并且读取相应的位置地址
+        """
+        reward = self._calculate_reward()
+        if self.station == 0: # (125,80)or(25,80)
+            x,y = self.get_position()
+            if x > 72:
+                pre_dist = self.get_distance(120,80)
+            else:
+                pre_dist = self.get_distance(25,80)
+        elif self.station == 1: # (125,45)or(25,45)
+            x,y = self.get_position()
+            if x > 72:
+                pre_dist = self.get_distance(120,45)
+            else:
+                pre_dist = self.get_distance(25,45)
+        elif self.station == 2: # (125, 10)or(25, 10)
+            x,y = self.get_position()
+            if x > 72:
+                pre_dist = self.get_distance(120, 10)
+            else:
+                pre_dist = self.get_distance(25, 10)
+        elif self.station == 3: # (80, 10),引导人物前往按钮上方
+            x,y = self.get_position()    
+            pre_dist = self.get_distance(80, 10)
+        elif self.station == 3: # (80, 45),引导人物前往按钮
+            x,y = self.get_position()    
+            pre_dist = self.get_distance(80, 45)
+
         if action != 0:
             self.pyboy.button(actions[action])
-
-        self.pyboy.tick(5)
-
-        # 计算奖励（来源于reward函数）
-        reward = self._calculate_reward()
-
+        self.pyboy.tick(10)
         """
         不能让角色走出房间😡
         """
-        if(self.pyboy.memory[0xDBAE] != 51):
-            self.reset()
-            reward -= 0.1
-        
-        a,b = self.get_distance()
+        if(self.room):
+            # 计算奖励（来源于reward函数）
+            if(self.pyboy.memory[0xDBAE] != 51):
+                #self.reset()
+                reward -= 0.2
+                self.room = False
 
-        x,y = self.get_position()
+            x,y = self.get_position()
 
-        if self.flag:
             """
             此时需要让ai前往按钮位置
-            """
-            reward += (- a + current_a)/10
-            """
+                
             新增阶段性奖励
             """
             if self.station == 0:
-                if(y < 40):
-                    reward += (- b + current_b)/10
-                if(abs(x - 125) < 5 and abs(y - 80) < 10):
-                    reward += 1000
-                    self.station = 1
-                reward += (200 - (abs(x -125) + abs(y - 80)))/ 100
+                if x > 72:
+                    cur_dist = self.get_distance(120, 80)
+                    reward += (pre_dist - cur_dist) / 20
+                else:
+                    cur_dist = self.get_distance(25, 80)
+                    reward += (pre_dist - cur_dist) / 20
+
             elif self.station == 1:
-                if (abs(x - 125) < 10 and abs(y - 10) < 10):
-                    reward += 1000
-                    self.station = 2
-                reward += (200 - (abs(x -125) + abs(y - 10)))/ 100
-                            
+                if x > 72:
+                    cur_dist = self.get_distance(120, 45)
+                    reward += (pre_dist - cur_dist) / 20
+                else:
+                    cur_dist = self.get_distance(25, 45)
+                    reward += (pre_dist - cur_dist) / 20
+
+            elif self.station == 2:
+                if x > 72:
+                    cur_dist = self.get_distance(120, 10)
+                    reward += (pre_dist - cur_dist) / 20
+                else:
+                    cur_dist = self.get_distance(25, 10)
+                    reward += (pre_dist - cur_dist) / 20
+
+            elif self.station == 3: 
+                cur_dist = self.get_distance(80, 10)
+                reward += (pre_dist - cur_dist) / 20
+
+            elif self.station == 4:
+                cur_dist = self.get_distance(80, 45)
+                reward += (pre_dist - cur_dist) / 20
+
+            # 对于扣血操作加以惩罚
+            new_health = self.pyboy.memory[0xDB5A]
+            reward -= (current_health - new_health) * 0.05
+            if(self.count % 20 == 0):
+                self.count = 0
+                print(reward,self.station)
         else:
-            reward += (- b + current_b)/10
-        
-        # 对于扣血操作加以惩罚
-        new_health = self.pyboy.memory[0xDB5A]
-        reward -= (current_health - new_health) * 0.01
+            reward -= 0.01
+            if(self.count % 20 == 0):
+                self.count = 0
+                print(reward,self.station)
 
         # 判断游戏是否结束
         done = self.game_over()
@@ -142,30 +195,63 @@ class ZeldaPyBoyEnv(gym.Env):
         y = sprite.y
         return x, y
 
-    def get_distance(self):
+    def get_distance(self,a,b):
         """获取人物的位置"""
         x, y = self.get_position()
-        distance_one = abs(x - 80) + abs(y - 45) # 与按钮的距离
-        distance_two = abs(x - 128) + abs(y - 42) # 与宝箱的距离
-        return distance_one, distance_two
+        distance = abs(x - a) + abs(y - b) # 计算与（a，b）的距离
+        return distance
     
     def _calculate_reward(self):
-        """计算奖励：基于屏幕变化"""
+        """
+        计算奖励, 对于踩下按钮和打开宝箱给出高额奖励,并且对于阶段奖励的完成给出状态切换
+        """
         # TODO:补全奖励函数的设置
         reward = 0
-
         x,y = self.get_position()
-        if(abs(x - 80) < 5 and abs(y - 45) < 5 and self.flag):
-            self.flag = False
-            reward += 2000
+        if self.station == 0:
+            if(x > 72):
+                dist = self.get_distance(120,80)
+                if(dist < 8 or (y < 60 and y > 10)):
+                    self.station = 1
+                    reward += 5
+            else:
+                dist = self.get_distance(25,80)
+                if(dist < 8 or (y < 60 and y > 10)):
+                    self.station =1
+                    reward += 5
+        elif self.station == 1:
+            if(x > 72):
+                dist = self.get_distance(120,45)
+                if(dist < 8 or (y < 45 and y > 10)):
+                    self.station = 2
+                    reward += 5
+            else:
+                dist = self.get_distance(25,45)
+                if(dist < 8 or (y < 45 and y > 10)):
+                    self.station =2
+                    reward += 5
+        elif self.station == 2:
+            if(x > 72):
+                dist = self.get_distance(120,10)
+                if(dist < 10):
+                    self.station = 3
+                    reward += 5
+            else:
+                dist = self.get_distance(25,10)
+                if(dist < 10):
+                    self.station = 3
+                    reward += 5
+        elif self.station == 3:  
+            dist = self.get_distance(80,10)
+            if(dist < 8):
+                self.station = 4
+                reward += 5
         
-        distance_one, distance_two = self.get_distance()
-
-        if(x,y) == (72,112):
-            reward -= 1
+        if(abs(x - 80) < 4 and abs(y - 45) < 4):
+            reward += 100
         
         if(self.pyboy.memory[0xDBD0] == 1):
-            reward += 2000
+            reward += 200
         return reward
 
     def _get_observation(self):
@@ -177,10 +263,11 @@ class ZeldaPyBoyEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         """
-        重置游戏阶段标志
+        重置游戏阶段
         """
-        self.flag = True
         self.station = 0
+        self.room = True
+        self.count = 0
         # 重新加载游戏环境
         self.pyboy.stop()
         self.pyboy =  PyBoy(ROM_PATH, sound=False)
@@ -199,7 +286,6 @@ class ZeldaPyBoyEnv(gym.Env):
         if mode == 'human':
             self.pyboy.render_screen()
     
-
 # 自定义回调函数用于记录 reward
 class RewardLoggerCallback(BaseCallback):
     def __init__(self):
@@ -230,30 +316,14 @@ def plot_rewards(rewards):
     plt.savefig("reward_curve.png") 
     plt.show()
 
-# 运行测试，先测试随机策略下环境能否正常运行
-"""
-if __name__ == "__main__":
-    env = ZeldaPyBoyEnv("Link's awakening.gb", "Link's awakening.gb.state")
-    
-    obs, info = env.reset()
-    
-    for i in range(1000):
-        env.pyboy.tick(1)
-        if i % 10 == 0:
-            action = random.randint(0, len(actions) - 1)  # 随机选择动作
-            obs, reward, done, _, _ = env.step(action)
-        if done:
-            break
-    
-    env.close()
-"""
+
 # 训练函数
 def train():
     #env = ZeldaPyBoyEnv(ROM_PATH, STATE_PATH)
     """
     防止AI陷入无意义行动中增加最大步数限制
     """
-    env = TimeLimit(ZeldaPyBoyEnv(ROM_PATH, STATE_PATH), max_episode_steps=2000)
+    env = TimeLimit(ZeldaPyBoyEnv(ROM_PATH, STATE_PATH), max_episode_steps=4000)
 
     env = Monitor(env)
     model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_zelda/", device='cpu')
@@ -261,13 +331,12 @@ def train():
     reward_callback = RewardLoggerCallback()
     # 训练
     model.learn(total_timesteps=100000, callback=reward_callback)
+    model.save("RL_model/ppo_zelda")
     # 绘图
     plot_rewards(reward_callback.episode_rewards)
 
     mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10, deterministic=True)
     print(f"Mean reward: {mean_reward}, Std: {std_reward}")
-
-    model.save("RL_model/ppo_zelda")
 
 # 测试函数
 def test():
