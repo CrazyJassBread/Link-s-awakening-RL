@@ -47,8 +47,8 @@ def extract_link_position(game_wrapper):
     return (None, None)
 
 # 初始化 PyBoy
-pyboy = PyBoy("Link's awakening.gb")
-save_file = "Link's awakening.gb.state"
+pyboy = PyBoy("RL\game_state\Link's awakening.gb")
+save_file = "RL\game_state\Link's awakening.gb.state"
 with open(save_file, "rb") as f:
     pyboy.load_state(f)  # 使用无头模式
 pyboy.game_wrapper.start_game()

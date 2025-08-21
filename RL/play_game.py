@@ -1,9 +1,9 @@
 import io
 import keyboard
 from pyboy import PyBoy
-
-pyboy = PyBoy("game_state\Link's awakening.gb")
-save_file = "game_state\Link's awakening.gb.state"
+import numpy as np
+pyboy = PyBoy("RL\game_state\Link's awakening.gb")
+save_file = "RL\game_state\Link's awakening.gb.state"
 
 try:
     with open(save_file, "rb") as f:
@@ -25,14 +25,19 @@ for i in range(10000):
     else:
         last_save_state = False
 
-    if (i%100 == 0):
+    if (i%200 == 0):
         #print(pyboy.memory[0xDB5A])
-        sprite = pyboy.get_sprite(2)
-        x = sprite.x
-        y = sprite.y
-        print(f"人物位置：({x}, {y})")
+        
+        print("###############################")
+        frame = pyboy.game_area()   # 或者 screen_image().convert('RGB') -> np.array
+        #print(type(frame))       # 查看数据类型（应该是 numpy.ndarray）
+        print(frame.shape)       # 数组形状，例如 (144, 160, 3)
+        #print(frame.dtype)
+        np.set_printoptions(threshold=np.inf)  # 关闭省略，打印完整数组
+        print(frame)
+        #print(pyboy.game_area())
         #print(sprite)
-
+        #print (pyboy.memory[0xDBAE])
     if keyboard.is_pressed('q'):
         break
 

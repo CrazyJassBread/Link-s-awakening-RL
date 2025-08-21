@@ -14,8 +14,8 @@ def manual_memory_scan(pyboy, target_value, start=0xA000, end=0xDFFF):
     return found
 
 # 初始化并扫描
-state = r"Link's awakening.gb.state"
-pyboy = PyBoy("Link's awakening.gb",window = "null")
+state = r"RL\game_state\Link's awakening.gb.state"
+pyboy = PyBoy("RL\game_state\Link's awakening.gb",window = "null")
 #pyboy.game_wrapper.start_game()
 try:
     with open(state, "rb") as f:
