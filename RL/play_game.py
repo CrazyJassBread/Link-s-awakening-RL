@@ -16,7 +16,7 @@ last_save_state = False
 for i in range(10000):
     pyboy.tick()
     
-    if keyboard.is_pressed('x'):
+    if keyboard.is_pressed('b'):
         if not last_save_state: 
             with open(save_file, "wb") as f:
                 pyboy.save_state(f)
@@ -26,18 +26,8 @@ for i in range(10000):
         last_save_state = False
 
     if (i%200 == 0):
-        #print(pyboy.memory[0xDB5A])
-        
-        print("###############################")
-        frame = pyboy.game_area()   # 或者 screen_image().convert('RGB') -> np.array
-        #print(type(frame))       # 查看数据类型（应该是 numpy.ndarray）
-        print(frame.shape)       # 数组形状，例如 (144, 160, 3)
-        #print(frame.dtype)
-        np.set_printoptions(threshold=np.inf)  # 关闭省略，打印完整数组
-        print(frame)
-        #print(pyboy.game_area())
-        #print(sprite)
-        #print (pyboy.memory[0xDBAE])
+        print(pyboy.memory[0xDBAE],pyboy.memory[0xDBD0])
+
     if keyboard.is_pressed('q'):
         break
 
