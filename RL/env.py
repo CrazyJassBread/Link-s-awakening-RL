@@ -1,9 +1,13 @@
 import numpy as np
 import random
 from pyboy import PyBoy
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import Env, spaces
 from pyboy.utils import WindowEvent
+from skimage.transform import downscale_local_mean
+
+# 设置最大步数限制
+TOTAL_STEPS = 1000000
 
 game_file = "RL\game_state\Link's awakening.gb"
 #TODO ：在后续为每个房间都保存相应的state文件
@@ -26,14 +30,14 @@ class Zelda_Env(gym.Env):
         
         """游戏状态参数设置"""
         # 记录agent行动前的血量和行动后的血量
-        self.max_health = self.read_m[0xDB5B]
-        self.pre_health = self.read_m[0xDB5A]
+        self.max_health = self.read_m(0xDB5B)
+        self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
         # 当前所处的迷宫房间号
         self.pre_room = None
-        self.cur_room = self.read_m[0xDBAE]
+        self.cur_room = self.read_m(0xDBAE)
         self.visited_rooms = set()
-        self.zelda = self.pyboy.game_wrapper
+        #self.zelda = self.pyboy.game_wrapper
         # 设置不同房间的任务目标
         self.room_goals = {
             59: "leave current room", # 59号房间是迷宫入口房间
@@ -42,8 +46,6 @@ class Zelda_Env(gym.Env):
 
         """动作空间设定"""
         # 定义动作空间和观察空间
-        self.action_space = spaces.Discrete(len(actions))
-        # 更精细的动作控制则需要使用如下的形式
         self.valid_actions = [
             WindowEvent.PRESS_ARROW_DOWN,
             WindowEvent.PRESS_ARROW_LEFT,
@@ -62,33 +64,81 @@ class Zelda_Env(gym.Env):
             WindowEvent.RELEASE_BUTTON_B,
             #WindowEvent.RELEASE_BUTTON_START
         ]
-        self.screen = self.pyboy.screen
-        screen_shape = self.screen.ndarray.shape
-        self.observation_space = spaces.Box(low=0, high=255, shape=(screen_shape[0],screen_shape[1]), dtype=np.uint8)
+        self.action_space = spaces.Discrete(len(self.valid_actions))
+
+        # obs空间设置
+        self.observation_space = spaces.Dict(
+            {
+                "health": spaces.Box(low = 0,high = 24,dtype = np.uint8),
+                "screen": spaces.Box(low = 0,high = 255, shape = (72,80,1),dtype = np.uint8),
+                "agent_pos" : spaces.Box(
+                    low=np.array([0, 0], dtype=np.uint8),        # x 最小 0, y 最小 0
+                    high=np.array([144, 160], dtype=np.uint8),
+                    dtype = np.uint8)
+            }
+        )
+
         """训练参数设置""" 
         self.reward = 0
         self.cur_step = None
         self.episode = 0
 
+    def reset(self, seed = None, options = None):
+        # SB3必须传入seed参数，否则会报错
+        super().reset(seed = seed)
+        if seed is not None:
+            np.random.seed(seed)
+        self.cur_step = 0
+        self.episode += 1
+        self.reward = 0
+
+        # 重置走过的房间编号
+        self.pre_room = self.read_m(0xDBAE)
+        self.cur_room = self.pre_room
+        self.visited_rooms = set()
+
+        #这里采用更方便的方式，及直接使用stateload来重置游戏
+        self.pyboy.send_input(WindowEvent.STATE_LOAD) 
+        self.pyboy.tick(1)
+        #self.pyboy.send_input(WindowEvent.STATE_LOAD)
+        
+        # 重置其他状态参数
+        self.pre_health = self.read_m(0xDB5A)
+        self.cur_health = self.pre_health
+
+        self.pre_room = None
+        self.cur_room = self.read_m(0xDBAE)
+
+        observation = self._get_obs()
+        info = self._get_info()
+        return observation, info
+    
     # 游戏画面渲染设置
     def render(self, mode = "human"):
         if mode == "human":
             self.pyboy.render_screen()
+    
+    # 处理游戏screen，降低维度并且缩放至size大小，以备后续rl训练使用
+    def preprocess_for_rl(self):
+        game_pixels_render = self.pyboy.screen.ndarray[:,:,0:1]
+        game_pixels_render = (
+            downscale_local_mean(game_pixels_render,(2,2,1))
+        ).astype(np.uint8)
+        return game_pixels_render
+
 
     def _get_obs(self):
         """读取游戏当前状态，并将其转换成易于读取的格式"""
-        self.health = self.read_m[0xDB5A]
-        self.max_health = self.read_m[0xDB5B]
-        
+        # 目前训练任务下 obs不需要返回过多的信息
+        cur_screen = self.preprocess_for_rl()
         observation = {
-            "agent_pos": self._get_pos(),
-            "health" : self.health,
-            "max_health":self.max_health,
-            "game_area": self.pyboy.game_area(),
-            "key" : self.read_m(0xDBD0), # 读取钥匙数量，1表示成功拿到钥匙
-            "room" :self.read_m(0xDBAE), # 当前所处的房间位置
-            "ItemA": self.read_m(0xDB01), # ab按键对应的物品，参见物品表
-            "ItemB": self.read_m(0xDB00)
+            "screen": cur_screen,
+            "health": self.cur_health,
+            "agent_pos": self._get_pos()
+            #"key" : self.read_m(0xDBD0), # 读取钥匙数量，1表示成功拿到钥匙
+            #"room" :self.read_m(0xDBAE), # 当前所处的房间位置
+            #"ItemA": self.read_m(0xDB01), # ab按键对应的物品，参见物品表
+            #"ItemB": self.read_m(0xDB00)
         }
         return observation
     
@@ -96,7 +146,6 @@ class Zelda_Env(gym.Env):
     def _get_info(self):
         """获取额外的游戏信息（针对不同房间设置）目前由于直接在单个房间中训练暂时不用太担心"""
         #room = self.read_m(0xDBAE)
-
         info = {
 
         }
@@ -108,47 +157,6 @@ class Zelda_Env(gym.Env):
         x = sprite.x
         y = sprite.y
         return (x, y)
-
-    def reset(self):
-        self.cur_step = 0
-        self.episode += 1
-        self.reward = 0
-
-        # 重置走过的房间编号
-        self.pre_room = self.read_m[0xDBAE]
-        self.cur_room = self.pre_room
-        self.visited_rooms = set()
-
-        """重置游戏状态
-        self.pyboy.stop()
-        self.pyboy = PyBoy(game_file, sound_emulated = False)
-        try:
-            with open(save_file, "rb") as f:
-                self.pyboy.load_state(f)
-        except FileNotFoundError:
-            print("No existing save file, starting new game")
-        """
-        #这里采用更方便的方式，及直接使用stateload来重置游戏
-        self.pyboy.send_input(WindowEvent.STATE_LOAD) 
-        self.pyboy.tick(1)
-        #self.pyboy.send_input(WindowEvent.STATE_LOAD)
-        
-        # 重置其他状态参数
-        self.pre_health = self.read_m[0xDB5A]
-        self.cur_health = self.pre_health
-
-        self.pre_room = None
-        self.cur_room = self.read_m[0xDBAE]
-
-        observation = self._get_obs()
-        info = self._get_info()
-        return observation, info
-
-    def close(self):
-        self.pyboy.stop()
-
-    def read_m(self, addr): # 内存读取辅助函数
-        return self.pyboy.memory[addr]
     
     def run_action(self, action):
         """执行特定的动作操作"""
@@ -168,13 +176,18 @@ class Zelda_Env(gym.Env):
         self.cur_step += 1
 
         self.pre_room = self.cur_room # 记录行动前的房间号
+        
+        self.pre_health = self.cur_health
 
         self.run_action(action)
+
+        self.cur_health = self.read_m(0xDB5A)
+
         self.cur_room = self.read_m(0xDBAE)
 
         new_reward = self.calculate_reward()
 
-        self.visited_rooms.add(self.room) # 将当前房间放入已访问房间中
+        self.visited_rooms.add(self.cur_room) # 将当前房间放入已访问房间中
 
         self.reward += new_reward
 
@@ -184,7 +197,11 @@ class Zelda_Env(gym.Env):
 
         done = self.is_done()
 
-        return observation, new_reward, done, info
+        truncated = False
+        if(self.cur_step >= TOTAL_STEPS):
+            truncated = True
+
+        return observation, new_reward, done, truncated, info
     
     def check_visited(self, room_id):
         """检查当前房间是否被访问过"""
@@ -192,7 +209,8 @@ class Zelda_Env(gym.Env):
     
     def check_goal(self):
         """检查当前房间的目标是否完成"""
-        goal = self.room_goads.get(self.pre_room, None)
+        #TODO 其他房间的奖励设置
+        goal = self.room_goals.get(self.pre_room, None)
         if goal == "leave current room":
             if self.check_visited(self.cur_room):
                 return True
@@ -215,6 +233,12 @@ class Zelda_Env(gym.Env):
         if self.read_m(0xDB5A) == 0:
             return True
 
+    def close(self):
+        self.pyboy.stop()
+
+    def read_m(self, addr): # 内存读取辅助函数
+        return self.pyboy.memory[addr]
+    
     def check_item(self,item = 0x0A):# 默认寻找羽毛
         """检查背包中是否有特定物品"""
         for addr in range(0xDB00, 0xDB0B):
