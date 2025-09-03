@@ -12,7 +12,7 @@ MAX_STEPS = 1000
 
 game_file = "RL\game_state\Link's awakening.gb"
 #XXX ：为每个房间都保存相应的state文件,当前任务是房间58
-save_file = "RL\game_state\Room_58.state"
+save_file = "RL\game_state\Room_51.state"
 
 class Zelda_Env(gym.Env):
     def __init__(self, game_file, save_file):
@@ -31,6 +31,11 @@ class Zelda_Env(gym.Env):
         self.max_health = self.read_m(0xDB5B)
         self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
+
+        # XXX 似乎可以通过持有的卢比数目来判断是否击杀怪物
+        self.pre_rupee = self.read_m(0xDB5E)
+        self.cur_rupee = self.read_m(0xDB5E)
+
         # 当前所处的迷宫房间号
         self.goal_room = self.read_m(0xDBAE)
         self.cur_room = self.read_m(0xDBAE)
@@ -42,7 +47,8 @@ class Zelda_Env(gym.Env):
         # 设置不同房间的任务目标
         self.room_goals = {
             59: "leave current room", # 59号房间是迷宫入口房间
-            58: "kill enemy and get key" # 迷宫入口左侧房间，有两个乌龟怪物
+            58: "kill enemy and get key", # 迷宫入口左侧房间，有两个乌龟怪物
+            51: "kill turtle,push button and open box" # 有一个凹型陷阱，需要绕过陷阱并且击败怪物
         }
 
         """动作空间设定"""
@@ -279,6 +285,12 @@ class Zelda_Env(gym.Env):
         elif goal == "kill enemy and get key":
             if self.read_m(0xDBD0) >= 1:
                 return True
+            
+        elif goal == "kill turtle,push button and open box":
+            # XXX 目前暂定目标是拿到钥匙
+            if self.read_m(0xDBD0) >= 1:
+                return True
+
         return False
     
     def is_done(self):
@@ -313,10 +325,18 @@ class Zelda_Env(gym.Env):
     def get_distance(self):
         room_id = self.goal_room
         x,y = self._get_pos()
+        # TODO： 目前只完成了58号房间的distance，其他房间还未补充
         if room_id == 58:
             return abs(34 - x) + abs(45 - y)
         return 0
     
+    def calculate_rupees(self):
+        self.cur_rupee = self.read_m(0xDBAE)
+        if self.cur_rupee > self.pre_rupee:
+            self.pre_rupee = self.cur_rupee
+            return True
+        return False
+
     def calculate_reward(self):
         """计算当前的奖励函数"""
         # TODO
@@ -327,6 +347,9 @@ class Zelda_Env(gym.Env):
 
         #if self.is_hurt() != 0:
         reward += 0.01 * self.is_hurt()
+
+        if self.calculate_rupees():
+            reward += 1
 
         if self.check_goal():
             reward += 10
