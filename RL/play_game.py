@@ -7,6 +7,7 @@ from skimage.transform import downscale_local_mean
 
 pyboy = PyBoy("RL\game_state\Link's awakening.gb")
 save_file = "RL\game_state\Link's awakening.gb.state"
+save_state = "RL\game_state\Room_58.state"
 
 try:
     with open(save_file, "rb") as f:
@@ -29,25 +30,19 @@ for i in range(100000):
     
     if keyboard.is_pressed('b'):
         if not last_save_state: 
-            with open(save_file, "wb") as f:
+            with open(save_state, "wb") as f:
                 pyboy.save_state(f)
-            print(f"✅ 游戏状态已保存至 {save_file}")
+            print(f"✅ 游戏状态已保存至 {save_state}")
             last_save_state = True
     else:
         last_save_state = False
 
-    if (i%200 == 0):
-        #print(pyboy.memory[0xDBAE],pyboy.memory[0xDBD0])
-        #frame = render(pyboy.screen.ndarray)
-        #frame = pyboy.screen.ndarray
-        #print(frame.shape)
-        #print(frame.dtype)
-        #print(type(frame))
-        #print(type(photo))
-        #print(frame)
-        #print(pyboy.get_sprite(2).x,pyboy.get_sprite(2).y)
+    if (i%50 == 0):
         print(pyboy.memory[0xDBAE])
-
+        sprite = pyboy.get_sprite(2)
+        x = sprite.x
+        y = sprite.y
+        print(x,y)
     if keyboard.is_pressed('q'):
         break
 

@@ -10,11 +10,8 @@ from skimage.transform import downscale_local_mean
 TOTAL_STEPS = 1000000
 
 game_file = "RL\game_state\Link's awakening.gb"
-#TODO ：在后续为每个房间都保存相应的state文件
-save_file = "RL\game_state\Link's awakening.gb.state"
-
-#mode = "human"
-actions = ["","a","b","left","right","up","down"]
+#XXX ：为每个房间都保存相应的state文件,当前任务是房间58
+save_file = "RL\game_state\Room_58.state"
 
 class Zelda_Env(gym.Env):
     def __init__(self, game_file, save_file):
@@ -34,8 +31,11 @@ class Zelda_Env(gym.Env):
         self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
         # 当前所处的迷宫房间号
-        self.pre_room = None
+        self.goal_room = self.read_m(0xDBAE)
         self.cur_room = self.read_m(0xDBAE)
+        self.out_side = 0 # XXX 计算agent脱离目标房间的时间
+        # XXX 新增房间目标完成检测
+        self.cur_goal = False
         self.visited_rooms = set()
         #self.zelda = self.pyboy.game_wrapper
         # 设置不同房间的任务目标
@@ -72,15 +72,14 @@ class Zelda_Env(gym.Env):
                 "health": spaces.Box(low = 0,high = 24,dtype = np.uint8),
                 "screen": spaces.Box(low = 0,high = 255, shape = (72,80,1),dtype = np.uint8),
                 "agent_pos" : spaces.Box(
-                    low=np.array([0, 0], dtype=np.uint8),        # x 最小 0, y 最小 0
-                    high=np.array([144, 160], dtype=np.uint8),
-                    dtype = np.uint8)
+                    low=np.array([-200, -200], dtype=np.int16),        # x 最小 0, y 最小 0
+                    high=np.array([200, 200], dtype=np.int16),
+                    dtype = np.int16)
             }
         )
-
         """训练参数设置""" 
         self.reward = 0
-        self.cur_step = None
+        self.cur_step = 0
         self.episode = 0
 
     def reset(self, seed = None, options = None):
@@ -93,12 +92,14 @@ class Zelda_Env(gym.Env):
         self.reward = 0
 
         # 重置走过的房间编号
-        self.pre_room = self.read_m(0xDBAE)
-        self.cur_room = self.pre_room
+        self.goal_room = self.read_m(0xDBAE)
+        self.cur_room = self.goal_room
         self.visited_rooms = set()
 
         #这里采用更方便的方式，及直接使用stateload来重置游戏
-        self.pyboy.send_input(WindowEvent.STATE_LOAD) 
+        #self.pyboy.send_input(WindowEvent.STATE_LOAD) 
+        with open(save_file, "rb") as f:
+            self.pyboy.load_state(f)
         self.pyboy.tick(1)
         #self.pyboy.send_input(WindowEvent.STATE_LOAD)
         
@@ -106,7 +107,7 @@ class Zelda_Env(gym.Env):
         self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
 
-        self.pre_room = None
+        self.goal_room = self.read_m(0xDBAE)
         self.cur_room = self.read_m(0xDBAE)
 
         observation = self._get_obs()
@@ -147,8 +148,14 @@ class Zelda_Env(gym.Env):
         """获取额外的游戏信息（针对不同房间设置）目前由于直接在单个房间中训练暂时不用太担心"""
         #room = self.read_m(0xDBAE)
         info = {
-
+            "goal" : False,
+            "room" : self.cur_room 
         }
+        if self.check_goal():
+            info = {
+                "goal" : True,
+                "room" : self.cur_room
+            }
         return info
     
     def _get_pos(self):
@@ -157,6 +164,16 @@ class Zelda_Env(gym.Env):
         x = sprite.x
         y = sprite.y
         return (x, y)
+    
+    def _reset_state(self):
+        """检测角色目前的状态"""
+        sprite = self.pyboy.get_sprite(2)
+        if sprite.y == -16:
+            if self.is_dead():
+                return True
+            else:
+                return False
+
     
     def run_action(self, action):
         """执行特定的动作操作"""
@@ -168,14 +185,30 @@ class Zelda_Env(gym.Env):
         self.pyboy.tick(8)
 
     def is_hurt(self):
+        if not isinstance(self.cur_health, (int, float)) or not isinstance(self.pre_health, (int, float)):
+            return 0  # 无法计算，默认不受伤害
+        
         if self.cur_health < self.pre_health:
-            return True
+            return self.cur_health - self.pre_health #XXX 在计算reward时乘一个折扣系数即可
+        
+        else:
+            return 0
+        
+    def outside(self):
+        if self.out_side >= 100:
+            self.out_side = 0
+            self.reset() #长时间逗留在外则需要重新开始
+
+        if self.cur_room != self.goal_room:
+            self.out_side += 1
+        else:
+            self.out_side = 0
         
     def step(self, action):
         assert self.action_space.contains(action), "Invalid action!"
         self.cur_step += 1
 
-        self.pre_room = self.cur_room # 记录行动前的房间号
+        #self.pre_room = self.cur_room # 记录行动前的房间号
         
         self.pre_health = self.cur_health
 
@@ -206,14 +239,29 @@ class Zelda_Env(gym.Env):
     def check_visited(self, room_id):
         """检查当前房间是否被访问过"""
         return room_id in self.visited_rooms
-    
+    """
+    def check_goal_59(self):
+        # 针对59号房间的任务专门设置
+        room_id = self.read_m(0xDBAE)
+        self.cur_room = room_id
+        if self.check_visited(room_id):
+            self.pre_room = self.cur_room
+        else:
+            self.pre_room = 
+            
+    """
+            
     def check_goal(self):
         """检查当前房间的目标是否完成"""
         #TODO 其他房间的奖励设置
-        goal = self.room_goals.get(self.pre_room, None)
+        goal = self.room_goals.get(self.goal_room, None)
         if goal == "leave current room":
-            if self.check_visited(self.cur_room):
+            #if self.check_visited(self.cur_room):
+                #return True
+                #TODO 这一块逻辑有误，需要重构
+            if self.cur_room != 59:
                 return True
+            
         elif goal == "kill enemy and get key":
             if self.read_m(0xDBD0) >= 1:
                 return True
@@ -223,6 +271,7 @@ class Zelda_Env(gym.Env):
         """判断游戏是否结束，或达成阶段性目标"""
         if self.check_goal():
             return True
+        
         if self.is_dead():
             return True
         
@@ -247,14 +296,28 @@ class Zelda_Env(gym.Env):
         
         return False
     
+    def get_distance(self):
+        room_id = self.goal_room
+        x,y = self._get_pos()
+        if room_id == 58:
+            return abs(34 - x) + abs(45 - y)
+        return 0
+    
     def calculate_reward(self):
         """计算当前的奖励函数"""
         # TODO
         reward = 0
         if self.is_dead():
-            reward += -5
-        if self.is_hurt():
             reward += -1
+
+        #if self.is_hurt() != 0:
+        reward += 0.01 * self.is_hurt()
+
         if self.check_goal():
             reward += 10
+        else:
+            if self.cur_room != self.goal_room:
+                reward -= 0.001
+            else:
+                reward -= 0.0001 * self.get_distance()
         return reward

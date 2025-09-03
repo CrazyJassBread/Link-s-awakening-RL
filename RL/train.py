@@ -17,7 +17,7 @@ checkpoint_callback = CheckpointCallback(
 
 TOTAL_STEPS = 1000000
 
-save_file = "RL\game_state\Link's awakening.gb.state"
+save_file = "RL\game_state\Room_58.state"
 game_file = "RL\game_state\Link's awakening.gb"
 
 env = Zelda_Env(game_file=game_file, save_file=save_file)
@@ -52,5 +52,5 @@ model = PPO(
 
 
 model.learn(total_timesteps=TOTAL_STEPS, progress_bar=True)
-model.save("RL\RL_model\ppo_zelda_final")
+model.save("RL\RL_model\ppo_58_final")
 env.close()
