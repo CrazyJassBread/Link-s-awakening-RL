@@ -8,6 +8,7 @@ from skimage.transform import downscale_local_mean
 
 # 设置最大步数限制
 TOTAL_STEPS = 1000000
+MAX_STEPS = 1000
 
 game_file = "RL\game_state\Link's awakening.gb"
 #XXX ：为每个房间都保存相应的state文件,当前任务是房间58
@@ -91,11 +92,6 @@ class Zelda_Env(gym.Env):
         self.episode += 1
         self.reward = 0
 
-        # 重置走过的房间编号
-        self.goal_room = self.read_m(0xDBAE)
-        self.cur_room = self.goal_room
-        self.visited_rooms = set()
-
         #这里采用更方便的方式，及直接使用stateload来重置游戏
         #self.pyboy.send_input(WindowEvent.STATE_LOAD) 
         with open(save_file, "rb") as f:
@@ -104,11 +100,16 @@ class Zelda_Env(gym.Env):
         #self.pyboy.send_input(WindowEvent.STATE_LOAD)
         
         # 重置其他状态参数
+        # 重置走过的房间编号
+        self.goal_room = self.read_m(0xDBAE)
+        self.cur_room = self.goal_room
+        self.visited_rooms = set()
+
         self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
 
-        self.goal_room = self.read_m(0xDBAE)
-        self.cur_room = self.read_m(0xDBAE)
+        #self.goal_room = self.read_m(0xDBAE)
+        #self.cur_room = self.read_m(0xDBAE)
 
         observation = self._get_obs()
         info = self._get_info()
@@ -127,9 +128,9 @@ class Zelda_Env(gym.Env):
         ).astype(np.uint8)
         return game_pixels_render
 
-
+    """
     def _get_obs(self):
-        """读取游戏当前状态，并将其转换成易于读取的格式"""
+        读取游戏当前状态，并将其转换成易于读取的格式
         # 目前训练任务下 obs不需要返回过多的信息
         cur_screen = self.preprocess_for_rl()
         observation = {
@@ -142,8 +143,15 @@ class Zelda_Env(gym.Env):
             #"ItemB": self.read_m(0xDB00)
         }
         return observation
-    
-    
+    """
+    def _get_obs(self):
+        cur_screen = self.preprocess_for_rl()
+        return {
+            "screen": np.array(cur_screen, dtype=np.uint8),           # (72,80,1)
+            "health": np.array([self.cur_health], dtype=np.uint8),    # (1,)
+            "agent_pos": np.array(self._get_pos(), dtype=np.int16)    # (2,)
+        }
+
     def _get_info(self):
         """获取额外的游戏信息（针对不同房间设置）目前由于直接在单个房间中训练暂时不用太担心"""
         #room = self.read_m(0xDBAE)
@@ -173,7 +181,6 @@ class Zelda_Env(gym.Env):
                 return True
             else:
                 return False
-
     
     def run_action(self, action):
         """执行特定的动作操作"""
@@ -197,12 +204,15 @@ class Zelda_Env(gym.Env):
     def outside(self):
         if self.out_side >= 100:
             self.out_side = 0
-            self.reset() #长时间逗留在外则需要重新开始
+            #self.reset() #长时间逗留在外则需要重新开始
+            return True
 
         if self.cur_room != self.goal_room:
             self.out_side += 1
         else:
             self.out_side = 0
+        
+        return False
         
     def step(self, action):
         assert self.action_space.contains(action), "Invalid action!"
@@ -218,7 +228,9 @@ class Zelda_Env(gym.Env):
 
         self.cur_room = self.read_m(0xDBAE)
 
-        new_reward = self.calculate_reward()
+        truncated = False
+
+        new_reward,truncated = self.calculate_reward()
 
         self.visited_rooms.add(self.cur_room) # 将当前房间放入已访问房间中
 
@@ -230,8 +242,10 @@ class Zelda_Env(gym.Env):
 
         done = self.is_done()
 
-        truncated = False
-        if(self.cur_step >= TOTAL_STEPS):
+        #self.outside()
+
+        # 长时间执行无意义动作则增加截断
+        if(self.cur_step >= MAX_STEPS):
             truncated = True
 
         return observation, new_reward, done, truncated, info
@@ -307,6 +321,7 @@ class Zelda_Env(gym.Env):
         """计算当前的奖励函数"""
         # TODO
         reward = 0
+        done = False
         if self.is_dead():
             reward += -1
 
@@ -320,4 +335,8 @@ class Zelda_Env(gym.Env):
                 reward -= 0.001
             else:
                 reward -= 0.0001 * self.get_distance()
-        return reward
+
+        if self.outside():
+            reward -= 0.1
+            done = True
+        return reward, done
