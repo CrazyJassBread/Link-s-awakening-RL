@@ -123,6 +123,9 @@ class Zelda_Env(gym.Env):
         self.pre_health = self.read_m(0xDB5A)
         self.cur_health = self.pre_health
 
+        self.slimes = None
+        self.turtles = None
+        self.slimes, self.turtles = self._get_monsters()
         #self.goal_room = self.read_m(0xDBAE)
         #self.cur_room = self.read_m(0xDBAE)
 
@@ -369,7 +372,9 @@ class Zelda_Env(gym.Env):
 
         # 新增击杀怪物的reward
         if self.cur_room == 51:
-            self.reward_for_51(reward)
+            x,y = self._get_pos()
+            if y != -16:
+                self.reward_for_51(reward)
 
         if self.is_dead():
             reward += -1
