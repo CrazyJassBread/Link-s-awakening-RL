@@ -17,15 +17,6 @@ except FileNotFoundError:
 
 last_save_state = False
 
-"""
-def render(image):
-    game_pixels_render = image[:,:,0:1]  # (144, 160, 3)
-    game_pixels_render = (
-        downscale_local_mean(game_pixels_render, (2,2,1))
-    ).astype(np.uint8)
-    return game_pixels_render
-"""
-
 for i in range(2000):
     pyboy.tick()
     """
@@ -39,18 +30,13 @@ for i in range(2000):
         last_save_state = False
     """
     if (i%50 == 0):
-        print (pyboy.memory[0xDBAE])
-        print (pyboy.memory[0xDBD0])
-        print (pyboy.memory[0xDB5D],pyboy.memory[0xDB5E])
-        
-    """
-    if (i%50 == 0):
-        print(pyboy.memory[0xDBAE])
+        #print (pyboy.memory[0xDBAE])
+        #print (pyboy.memory[0xDBD0])
+        #print (pyboy.memory[0xDB5D],pyboy.memory[0xDB5E])
         sprite = pyboy.get_sprite(2)
         x = sprite.x
         y = sprite.y
         print(x,y)
-    """
     """
     if keyboard.is_pressed('q'):
         break

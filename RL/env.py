@@ -1,5 +1,5 @@
 import numpy as np
-import random
+# import random
 from pyboy import PyBoy
 import gymnasium as gym
 from gymnasium import Env, spaces
@@ -8,11 +8,11 @@ from skimage.transform import downscale_local_mean
 
 # 设置最大步数限制
 TOTAL_STEPS = 1000000
-MAX_STEPS = 2000
+MAX_STEPS = 5000
 
-game_file = "RL\game_state\Link's awakening.gb"
+game_file = "RL/game_state/Link's awakening.gb"
 #XXX ：为每个房间都保存相应的state文件,当前任务是房间58
-save_file = "RL\game_state\Room_51.state"
+save_file = "RL/game_state/Room_51.state"
 
 class Zelda_Env(gym.Env):
     def __init__(self, game_file, save_file):
@@ -39,13 +39,18 @@ class Zelda_Env(gym.Env):
         # 当前所处的迷宫房间号
         self.goal_room = self.read_m(0xDBAE)
         self.cur_room = self.read_m(0xDBAE)
-        self.out_side = 0 # XXX 计算agent脱离目标房间的时间
+        self.out_side = 0 # 计算agent脱离目标房间的时间
 
-        # XXX 新增房间目标完成检测
+        # 新增房间目标完成检测
         self.cur_goal = False
         self.visited_rooms = set()
         # 增加探索房间区域的奖励
         self.visited_tiles = set()  # 元素形式：(room_id, tile_x, tile_y)
+
+        # XXX 新增记录房间怪物的数量
+        self.slimes = None
+        self.turtles = None
+        self.slimes, self.turtles = self._get_monsters()
 
         # 设置不同房间的任务目标
         self.room_goals = {
@@ -80,7 +85,8 @@ class Zelda_Env(gym.Env):
         self.observation_space = spaces.Dict(
             {
                 "health": spaces.Box(low = 0,high = 24,dtype = np.uint8),
-                "screen": spaces.Box(low = 0,high = 255, shape = (72,80,1),dtype = np.uint8),
+                #"screen": spaces.Box(low = 0,high = 255, shape = (72,80,1),dtype = np.uint8),
+                "game_area" : spaces.Box(low = 0, high = 255, shape = (32,32,1),dtype = np.uint8),
                 "agent_pos" : spaces.Box(
                     low=np.array([-200, -200], dtype=np.int16),        # x 最小 0, y 最小 -16
                     high=np.array([200, 200], dtype=np.int16),
@@ -137,26 +143,11 @@ class Zelda_Env(gym.Env):
         ).astype(np.uint8)
         return game_pixels_render
 
-    """
     def _get_obs(self):
-        读取游戏当前状态，并将其转换成易于读取的格式
-        # 目前训练任务下 obs不需要返回过多的信息
-        cur_screen = self.preprocess_for_rl()
-        observation = {
-            "screen": cur_screen,
-            "health": self.cur_health,
-            "agent_pos": self._get_pos()
-            #"key" : self.read_m(0xDBD0), # 读取钥匙数量，1表示成功拿到钥匙
-            #"room" :self.read_m(0xDBAE), # 当前所处的房间位置
-            #"ItemA": self.read_m(0xDB01), # ab按键对应的物品，参见物品表
-            #"ItemB": self.read_m(0xDB00)
-        }
-        return observation
-    """
-    def _get_obs(self):
-        cur_screen = self.preprocess_for_rl()
+        #cur_screen = self.preprocess_for_rl()
         return {
-            "screen": np.array(cur_screen, dtype=np.uint8),           # (72,80,1)
+            #"screen": np.array(cur_screen, dtype=np.uint8),           # (72,80,1)
+            "game_area" : np.array(self.pyboy.game_area(),dtype = np.uint8), #(32,32,1)
             "health": np.array([self.cur_health], dtype=np.uint8),    # (1,)
             "agent_pos": np.array(self._get_pos(), dtype=np.int16)    # (2,)
         }
@@ -273,40 +264,6 @@ class Zelda_Env(gym.Env):
         """检查当前房间是否被访问过"""
         return room_id in self.visited_rooms
     
-    """
-    def check_goal_59(self):
-        # 针对59号房间的任务专门设置
-        room_id = self.read_m(0xDBAE)
-        self.cur_room = room_id
-        if self.check_visited(room_id):
-            self.pre_room = self.cur_room
-        else:
-            self.pre_room = 
-            
-    """
-            
-    def check_goal(self):
-        """检查当前房间的目标是否完成"""
-        #TODO 其他房间的奖励设置
-        goal = self.room_goals.get(self.goal_room, None)
-        if goal == "leave current room":
-            #if self.check_visited(self.cur_room):
-                #return True
-                #TODO 这一块逻辑有误，需要重构
-            if self.cur_room != 59:
-                return True
-            
-        elif goal == "kill enemy and get key":
-            if self.read_m(0xDBD0) >= 1:
-                return True
-            
-        elif goal == "kill turtle,push button and open box":
-            # XXX 目前暂定目标是拿到钥匙
-            if self.read_m(0xDBD0) >= 1:
-                return True
-
-        return False
-    
     def is_done(self):
         """判断游戏是否结束，或达成阶段性目标"""
         if self.check_goal():
@@ -344,6 +301,20 @@ class Zelda_Env(gym.Env):
             return abs(34 - x) + abs(45 - y)
         return 0
     
+    def _get_monsters(self):
+        # 返回粘液怪、乌龟怪 （slimes 、 turtles）
+        game_area = self.pyboy.game_area()
+        sub_area = game_area[:20,:20]
+        thresholds = [85, 170]
+        labels = np.digitize(sub_area, thresholds)
+        # 这里粘液怪是1 、人物和乌龟怪是0、空余地图空间为2
+        count_0 = np.count_nonzero(labels == 0)
+        count_1 = np.count_nonzero(labels == 1)
+        slimes = (count_1 + 1) // 2
+        turtles = (count_0 - 1) // 4
+        # 在蝙蝠房间，蝙蝠怪的数量可以用与乌龟怪相同的方法来统计
+        return slimes, turtles
+    
     def calculate_rupees(self):
         """返回卢比是否增长"""
         self.cur_rupee = self.read_m(0xDBAE)
@@ -360,33 +331,62 @@ class Zelda_Env(gym.Env):
             if tile_key not in self.visited_tiles:
                 self.visited_tiles.add(tile_key)
                 return True
-            
         else:
             return False
         
+    def check_goal(self):
+        """检查当前房间的目标是否完成"""
+        #TODO 其他房间的奖励设置
+        goal = self.room_goals.get(self.goal_room, None)
+        if goal == "leave current room":
+            if self.cur_room != 59:
+                return True
+            
+        elif goal == "kill enemy and get key":
+            if self.read_m(0xDBD0) >= 1:
+                return True
+            
+        elif goal == "kill turtle,push button and open box":
+            # XXX 目前暂定目标是拿到钥匙
+            if self.read_m(0xDBD0) >= 1:
+                return True
+        return False
+    
+    def reward_for_51(self,reward):
+        slimes, turtles = self._get_monsters()
+        if turtles < self.turtles:
+            reward += 5
+            self.turtles = turtles
+        if slimes < self.slimes:
+            reward += 2
+            self.slimes = slimes
 
     def calculate_reward(self):
         """计算当前的奖励函数"""
         # TODO
         reward = 0
         done = False
+
+        # 新增击杀怪物的reward
+        if self.cur_room == 51:
+            self.reward_for_51(reward)
+
         if self.is_dead():
             reward += -1
 
-        #if self.is_hurt() != 0:
         reward += 0.01 * self.is_hurt()
 
         if self.calculate_rupees():
-            reward += 1
+            reward += 0.5
 
         if self._tile_reward():
-            reward += 0.01
+            reward += 0.001
 
         if self.check_goal():
             reward += 10
         else:
             if self.cur_room != self.goal_room:
-                reward -= 0.001
+                reward -= 0.0001
             else:
                 reward -= 0.0001 * self.get_distance()
 
