@@ -1,5 +1,4 @@
 import numpy as np
-# import random
 from pyboy import PyBoy
 import gymnasium as gym
 from gymnasium import Env, spaces
@@ -86,7 +85,7 @@ class Zelda_Env(gym.Env):
             {
                 "health": spaces.Box(low = 0,high = 24,dtype = np.uint8),
                 #"screen": spaces.Box(low = 0,high = 255, shape = (72,80,1),dtype = np.uint8),
-                "game_area" : spaces.Box(low = 0, high = 255, shape = (32,32,1),dtype = np.uint8),
+                "game_area" : spaces.Box(low = 0, high = 255, shape = (32,32),dtype = np.uint8),
                 "agent_pos" : spaces.Box(
                     low=np.array([-200, -200], dtype=np.int16),        # x 最小 0, y 最小 -16
                     high=np.array([200, 200], dtype=np.int16),
@@ -97,6 +96,8 @@ class Zelda_Env(gym.Env):
         self.reward = 0
         self.cur_step = 0
         self.episode = 0
+
+        """xunlian """
 
     def reset(self, seed = None, options = None):
         # SB3必须传入seed参数，否则会报错

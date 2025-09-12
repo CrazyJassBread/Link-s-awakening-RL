@@ -23,7 +23,7 @@ plt.show()
 thresholds = [85, 170]
 np.set_printoptions(threshold=np.inf, linewidth=200, suppress=True)
 
-for i in range(4000):
+for i in range(6000):
     pyboy.tick()
     game_matrix = pyboy.game_area()
     sub_matrix = game_matrix[:20,:20]
@@ -35,8 +35,8 @@ for i in range(4000):
         count = np.count_nonzero(labels == 0)
         print((count - 1)//4)
     # print(dtype(game_matrix))
-    img.set_data(quantized)
-    #img.set_data(sub_matrix)
+    #img.set_data(quantized)
+    img.set_data(sub_matrix)
     plt.draw()
     plt.pause(0.001)
 pyboy.stop()

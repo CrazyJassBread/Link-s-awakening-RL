@@ -17,7 +17,7 @@ except FileNotFoundError:
 
 last_save_state = False
 
-for i in range(2000):
+for i in range(100000):
     pyboy.tick()
     """
     if keyboard.is_pressed('b'):
@@ -29,6 +29,7 @@ for i in range(2000):
     else:
         last_save_state = False
     """
+    """
     if (i%50 == 0):
         #print (pyboy.memory[0xDBAE])
         #print (pyboy.memory[0xDBD0])
@@ -37,6 +38,7 @@ for i in range(2000):
         x = sprite.x
         y = sprite.y
         print(x,y)
+    """
     """
     if keyboard.is_pressed('q'):
         break
