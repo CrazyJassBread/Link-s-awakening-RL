@@ -1,13 +1,13 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
-from env import Zelda_Env, game_file, save_file
+from RL.PPO.env import Zelda_Env, game_file, save_state
 
 # 加载游戏环境
-save_file = "RL/game_state/Link's awakening.gb.state"
+save_state = "RL/game_state/Link's awakening.gb.state"
 game_file = "RL/game_state/Link's awakening.gb"
 
 def make_env():
-    return Zelda_Env(game_file=game_file, save_file=save_file)
+    return Zelda_Env(game_file=game_file, save_file=save_state)
 
 env = DummyVecEnv([make_env])
 

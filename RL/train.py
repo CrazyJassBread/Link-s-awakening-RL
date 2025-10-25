@@ -1,33 +1,66 @@
 import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.monitor import Monitor
-from env import Zelda_Env, game_file, save_file
 
+from PPO.envs.base_env import BaseEnv
+from PPO.envs.env51_01 import Room51_Task1_Env as Zelda_Env
+
+import imageio
 import os
-"""
-checkpoint_dir = "./checkpoints/"
-os.makedirs(checkpoint_dir, exist_ok=True)
-checkpoint_callback = CheckpointCallback(
-    save_freq=10_000,  # 每训练 10k 步保存一次模型
-    save_path=checkpoint_dir,
-    name_prefix="ppo_zelda"
-)
-"""
 
-TOTAL_STEPS = 1000000
+TOTAL_STEPS = 3000000
+SAVE_INTERVAL = 100000
+GIF_SAVE_PATH = "RL/gifs/ppo51_task1_gifs/"
 
-save_file = "RL\game_state\Room_58.state"
-game_file = "RL\game_state\Link's awakening.gb"
+save_state = "RL/game_state/Room51_task1.state"
+game_file = "RL/game_state/Link's awakening.gb"
 
-env = Zelda_Env(game_file=game_file, save_file=save_file)
+os.makedirs(GIF_SAVE_PATH, exist_ok=True)
+
+env = Zelda_Env(game_file=game_file, save_file=save_state)
+env.disable_render = True  # 禁用实时渲染以提升训练速度
 env = Monitor(env)
 
+class SaveGifCallback(BaseCallback):
+    def __init__(self, save_path, save_interval, verbose=0):
+        super(SaveGifCallback, self).__init__(verbose)
+        self.save_path = save_path
+        self.save_interval = save_interval
+
+    def _on_step(self) -> bool:
+        # 每隔 save_interval 步保存一次 GIF
+        if self.num_timesteps % self.save_interval == 0:
+            gif_path = os.path.join(self.save_path, f"step_{self.num_timesteps}.gif")
+            self._save_gif(gif_path)
+        return True
+
+    def _save_gif(self, gif_path):
+        frames = []
+        env = self.training_env.envs[0].unwrapped  # 获取当前环境
+        original_disable_render = getattr(env, "disable_render", False)
+        env.disable_render = False
+
+        obs, _ = env.reset()
+        for _ in range(2000):  # 渲染 2000 帧
+            frames.append(env.render(mode="rgb_array"))
+            action, _ = self.model.predict(obs, deterministic=True)
+            obs, _, done, _, _ = env.step(action)
+            if done:
+                break
+
+        env.disable_render = original_disable_render
+
+        env.close()
+        # 保存为 GIF
+        imageio.mimsave(gif_path, frames, fps=30)
+        if self.verbose > 0:
+            print(f"Saved GIF to {gif_path}")
 """
 # 检查环境是否封装完好
 from gymnasium.utils.env_checker import check_env
 try:
-    check_env(env)
+    check_env(env.unwrapped)
     print("Environment passes all checks!")
 except Exception as e:
     print(f"Environment has issues: {e}")
@@ -50,7 +83,9 @@ model = PPO(
     tensorboard_log="./ppo_zelda_tensorboard/"
 )
 
+gif_callback = SaveGifCallback(save_path=GIF_SAVE_PATH, save_interval=SAVE_INTERVAL)
 
-model.learn(total_timesteps=TOTAL_STEPS, progress_bar=True)
-model.save("RL\RL_model\ppo_58_final")
+model.learn(total_timesteps=TOTAL_STEPS, progress_bar=True, callback=gif_callback)
+
+model.save("RL/RL_model/ppo51_task1_final")
 env.close()
