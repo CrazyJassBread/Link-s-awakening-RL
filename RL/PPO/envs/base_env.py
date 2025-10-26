@@ -3,13 +3,16 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any
 from pyboy import PyBoy
+import json
+import os
+from pathlib import Path
 import gymnasium as gym
 from gymnasium import spaces
 from pyboy.utils import WindowEvent
 from skimage.transform import downscale_local_mean
 
 # 通用常量
-TOTAL_STEPS = 1_000_000
+TOTAL_STEPS = 3_000_000
 MAX_STEPS = 5_000
 
 # 内存地址（命名化，便于复用/维护）
@@ -33,7 +36,12 @@ class BaseEnv(gym.Env, ABC):
         self.save_file = save_file
 
         # 启动仿真与读档
-        self.pyboy = PyBoy(game_file, sound_emulated=False, window="null")
+        # 从配置文件（RL/configs/links_awakening.json）或环境变量 LA_TEST 读取 test 标志，
+        # 如果为 True 则开启 human 模式（PyBoy window="SDL2"），否则使用无窗口模式("null")
+        #self.test = self._load_test_flag()
+        self.test = False
+        window_mode = "SDL2" if self.test else "null"
+        self.pyboy = PyBoy(game_file, sound_emulated=False, window=window_mode)
         try:
             with open(save_file, "rb") as f:
                 self.pyboy.load_state(f)
@@ -73,16 +81,21 @@ class BaseEnv(gym.Env, ABC):
             WindowEvent.RELEASE_BUTTON_B,
         ]
         self.action_space = spaces.Discrete(len(self.valid_actions))
+        """
         self.observation_space = spaces.Dict(
             {
                 "health": spaces.Box(low=0, high=24, dtype=np.uint8),
-                "game_area": spaces.Box(low=0, high=255, shape=(32, 32), dtype=np.uint8),
+                "game_area": spaces.Box(low=0, high=255, shape=(144, 160, 4), dtype=np.uint8),
                 "agent_pos": spaces.Box(
                     low=np.array([-200, -200], dtype=np.int16),
                     high=np.array([200, 200], dtype=np.int16),
                     dtype=np.int16,
                 ),
             }
+        )
+        """
+        self.observation_space = spaces.Box(
+            low=0, high=255, shape=(144, 160, 4), dtype=np.uint8
         )
 
         # 训练计数
@@ -154,10 +167,10 @@ class BaseEnv(gym.Env, ABC):
 
     def render(self, mode: str = "human"):
         if mode == "human" and not getattr(self, "disable_render", False):
-            self.pyboy.render_screen()
+            self.pyboy.screen.ndarray
         elif mode == "rgb_array":
-        # 返回当前屏幕的像素数据
-            return self.pyboy.screen.ndarray
+            frame = self.pyboy.screen.ndarray
+            return frame
         else:
             raise ValueError(f"Unsupported render mode: {mode}")
 
@@ -187,12 +200,15 @@ class BaseEnv(gym.Env, ABC):
         return game_pixels_render
 
     def _get_obs(self):
+        ''' 原本的返回值是dict，现在应对cnn policy改成了box
         return {
-            "game_area": np.array(self.pyboy.game_area(), dtype=np.uint8),
+            "game_area": np.array(self.pyboy.screen.ndarray(), dtype=np.uint8),
             "health": np.array([self.cur_health], dtype=np.uint8),
             "agent_pos": np.array(self._get_pos(), dtype=np.int16),
         }
-
+        '''
+        return self.pyboy.screen.ndarray
+    
     def _get_info(self):
         return {
             "goal": bool(self.check_goal()),
@@ -256,3 +272,30 @@ class BaseEnv(gym.Env, ABC):
 
     def read_m(self, addr: int) -> int:
         return self.pyboy.memory[addr]
+
+    def _load_test_flag(self, config_filename: str = "links_awakening.json") -> bool:
+        """尝试从环境变量 LA_TEST 或 本仓库下 RL/configs/<config_filename> 的顶层 'test' 字段读取布尔值。
+        优先顺序：环境变量 > config 文件中的顶层 'test' 字段。找不到时返回 False。
+        """
+        # 环境变量优先（方便 CI / 测试覆盖）
+        env_val = os.getenv("LA_TEST")
+        if env_val is not None:
+            val = env_val.strip().lower()
+            if val in ("1", "true", "yes", "y", "on"):
+                return True
+            return False
+
+        # 从项目内的 RL/configs/links_awakening.json 读取（相对于当前文件路径）
+        try:
+            repo_rl_configs = Path(__file__).resolve().parents[2] / "configs" / config_filename
+            if repo_rl_configs.exists():
+                with open(repo_rl_configs, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    # 支持顶层 'test' 字段（布尔）
+                    if isinstance(cfg, dict) and "test" in cfg:
+                        return bool(cfg["test"])
+        except Exception:
+            # 不要让配置读取阻塞环境初始化；默认为 False
+            pass
+
+        return False
