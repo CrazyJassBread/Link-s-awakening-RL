@@ -1,7 +1,7 @@
 # Link's awakening RL
 ## 项目框架
 
-#### game state
+### game state
 
 game_state中保存了各种需要的游戏状态和迷宫关卡
 
