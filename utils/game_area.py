@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pynput import keyboard
 
-pyboy = PyBoy("RL/game_state/Link's awakening.gb")
-load_state = "RL/game_state/Room51_task1.state"
+pyboy = PyBoy("game_state/Link's awakening.gb")
+load_state = "game_state/Room51_task1.state"
 
 try:
     with open(load_state, "rb") as f:

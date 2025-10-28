@@ -3,9 +3,9 @@ from pyboy import PyBoy
 from pynput import keyboard
 import time
 
-pyboy = PyBoy("RL/game_state/Link's awakening.gb")
-load_state = "RL/game_state/Room59_task1.state"
-save_state = "RL/game_state/Room59_task2.state"
+pyboy = PyBoy("game_state/Link's awakening.gb")
+load_state = "game_state/Room_51.state"
+save_state = "game_state/Room51_task1.state"
 
 try:
     with open(load_state, "rb") as f:
@@ -47,9 +47,8 @@ try:
         if not running:
             break
         pyboy.tick()
-        if i % 100 == 0:
-            link = pyboy.get_sprite(2)
-            print(f"Link Position: x={link.x}, y={link.y}")
+        link = pyboy.get_sprite(2)
+        print(f"Link Position: x={link.x}, y={link.y}")
         time.sleep(0.01)
 finally:
     listener.stop()

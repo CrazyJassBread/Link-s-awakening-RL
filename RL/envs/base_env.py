@@ -10,7 +10,8 @@ import gymnasium as gym
 from gymnasium import spaces
 from pyboy.utils import WindowEvent
 from skimage.transform import downscale_local_mean
-
+from RL.PPO.envs.screen_abstract import gamearea_abstract
+import torch
 # 通用常量
 TOTAL_STEPS = 3_000_000
 MAX_STEPS = 5_000
@@ -35,9 +36,7 @@ class BaseEnv(gym.Env, ABC):
         self.game_file = game_file
         self.save_file = save_file
 
-        # 启动仿真与读档
-        # 从配置文件（RL/configs/links_awakening.json）或环境变量 LA_TEST 读取 test 标志，
-        # 如果为 True 则开启 human 模式（PyBoy window="SDL2"），否则使用无窗口模式("null")
+        # XXX：新增test来表示是测试还是训练
         #self.test = self._load_test_flag()
         self.test = False
         window_mode = "SDL2" if self.test else "null"
@@ -95,9 +94,8 @@ class BaseEnv(gym.Env, ABC):
         )
         """
         self.observation_space = spaces.Box(
-            low=0, high=255, shape=(144, 160, 4), dtype=np.uint8
+            low=0, high=255, shape=(8, 10), dtype=np.float32  # 修改为卷积后的形状
         )
-
         # 训练计数
         self.cur_step = 0
         self.episode = 0
@@ -207,7 +205,9 @@ class BaseEnv(gym.Env, ABC):
             "agent_pos": np.array(self._get_pos(), dtype=np.int16),
         }
         '''
-        return self.pyboy.screen.ndarray
+        screen_tensor = torch.tensor(self.pyboy.screen.ndarray[:128, :160, 0], dtype=torch.float32)
+        pooled = gamearea_abstract(screen_tensor)
+        return pooled.numpy()
     
     def _get_info(self):
         return {
@@ -273,10 +273,12 @@ class BaseEnv(gym.Env, ABC):
     def read_m(self, addr: int) -> int:
         return self.pyboy.memory[addr]
 
+
+    """
+    暂时不需要这个功能函数，没有编写合适的config文件
     def _load_test_flag(self, config_filename: str = "links_awakening.json") -> bool:
-        """尝试从环境变量 LA_TEST 或 本仓库下 RL/configs/<config_filename> 的顶层 'test' 字段读取布尔值。
-        优先顺序：环境变量 > config 文件中的顶层 'test' 字段。找不到时返回 False。
-        """
+        # 尝试从环境变量 LA_TEST 或 本仓库下 RL/configs/<config_filename> 的顶层 'test' 字段读取布尔值。
+        # 优先顺序：环境变量 > config 文件中的顶层 'test' 字段。找不到时返回 False。
         # 环境变量优先（方便 CI / 测试覆盖）
         env_val = os.getenv("LA_TEST")
         if env_val is not None:
@@ -295,7 +297,7 @@ class BaseEnv(gym.Env, ABC):
                     if isinstance(cfg, dict) and "test" in cfg:
                         return bool(cfg["test"])
         except Exception:
-            # 不要让配置读取阻塞环境初始化；默认为 False
             pass
 
         return False
+        """

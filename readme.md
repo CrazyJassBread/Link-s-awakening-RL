@@ -1,21 +1,30 @@
-## 项目目标
-本项目尝试训练一个能解决Zelda简单问题的agent，尝试使用纯PPO来进行探索，计划在之后引入多模态LLM进行规律总结和子任务划定，希望能通过结合两者取的更好的效果
+# Link's awakening RL
+## 项目框架
 
-目标是让agent在人工标注数据的引导下可以解决一号迷宫的大部分谜题
+#### game state
 
-一号迷宫缩略图如下所示![迷宫缩略图](image\迷宫一.png)
+game_state中保存了各种需要的游戏状态和迷宫关卡
 
-## 框架介绍
-`gamestate` 文件夹中存放有gb原始文件信息
-`play the game` 文件夹中可以人工游玩游戏
-`RL` 文件夹中是目前正在尝试的强化学习方法
+### RL
+RL目录下则记录当前对环境的封装、强化学习算法的定义，可以使用train.py来训练模型，用test.py来测试训练结果
 
-## 任务进展安排
-- [x] 尝试人工通关游戏
-- [ ] 选择简单的迷宫房间用PPO训练agent
-- [ ] 使用LLM总结游戏规则和子任务划分
+**envs**：
+- base_env 作为基类，定义了Gym的API接口、一些通用辅助函数
+- 其余房间则在继承了base_env的基础上采用了自定义的reward function
+- screen_abstract中定义了对游戏画面的高斯卷积函数，可以将 128 * 160 * 4的原始图像降维到 8 * 10 * 1
 
-## 参考资料、项目
+
+### utils
+**save_state**:
+
+可以读取游戏状态并手动保存需要的游戏阶段
+
+
+## 环境简介
+一号迷宫缩略图如下所示![迷宫缩略图](img/overview.png)
+
+
+## 参考
 
 游戏内存信息：[The Legend of Zelda: Link's Awakening (Game Boy) - Data Crystal](https://datacrystal.tcrf.net/wiki/The_Legend_of_Zelda:_Link%27s_Awakening_(Game_Boy))
 

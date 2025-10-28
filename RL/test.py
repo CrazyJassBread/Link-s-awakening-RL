@@ -4,13 +4,13 @@ import imageio
 import os
 import time
 
-from PPO.envs.env51_01 import Room51_Task1_Env as Zelda_Env
+from envs.env51_01 import Room51_Task1_Env as Zelda_Env
 
 # ------------------ 配置 --------------------
 MODEL_PATH = "RL/RL_model/test/ppo51_task1_final.zip"
 GIF_PATH = "RL/gifs/test/ppo51_task1_test.gif"
-SAVE_STATE = "RL/game_state/Room51_task1.state"
-GAME_FILE = "RL/game_state/Link's awakening.gb"
+SAVE_STATE = "game_state/Room51_task1.state"
+GAME_FILE = "game_state/Link's awakening.gb"
 MAX_FRAMES = 5000  # 最长多少帧后强制停止
 # --------------------------------------------
 

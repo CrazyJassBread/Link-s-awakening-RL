@@ -5,14 +5,12 @@ from stable_baselines3.common.monitor import Monitor
 import torch.nn as nn
 import torch
 
-from PPO.envs.base_env import BaseEnv
-from PPO.envs.env51_01 import Room51_Task1_Env as Zelda_Env
+from envs.base_env import BaseEnv
+from envs.env59_01 import Room59_Task1_Env as Zelda_Env
 from PPO.model import CustomResNet, CustomACPolicy, CustomPPO, TQDMProgressBar
 
 import imageio
 import os
-
-
 
 TOTAL_STEPS = 3000000
 SAVE_INTERVAL = 300000
@@ -26,15 +24,6 @@ os.makedirs(GIF_SAVE_PATH, exist_ok=True)
 env = Zelda_Env(game_file=game_file, save_file=save_state)
 env.disable_render = True
 env = Monitor(env)
-
-# Device selection: read LA_DEVICE env (e.g. 'cuda:0' or 'cpu'), otherwise prefer CUDA if available
-import torch
-la_device = os.getenv("LA_DEVICE")
-if la_device:
-    device = la_device
-else:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
 
 class SaveGifCallback(BaseCallback):
     def __init__(self, save_path, save_interval, verbose=0):
@@ -110,7 +99,6 @@ policy_kwargs = {
 model = CustomPPO(
     CustomACPolicy,
     env,
-    device=device,
     policy_kwargs=policy_kwargs,
     learning_rate=3e-4,
     n_steps=4096,
@@ -123,7 +111,8 @@ model = CustomPPO(
     vf_coef=0.5,
     max_grad_norm=0.5,
     verbose=1,
-    normalize_advantage=False
+    normalize_advantage=False,
+    tensorboard_log="./log/Room59/ppo_tensorboard/"
 )
 
 gif_callback = SaveGifCallback(save_path=GIF_SAVE_PATH, save_interval=SAVE_INTERVAL)

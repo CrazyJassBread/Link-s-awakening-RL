@@ -42,17 +42,14 @@ class CustomResNet(BaseFeaturesExtractor):
         else:
             raise ValueError(f"Unsupported observation space type: {type(observation_space)}")
 
-        if len(shape) != 3:
-            raise ValueError(f"Expect 3D image obs, got shape={shape}")
-
-        # 既支持 CHW 也支持 HWC
-        if shape[0] in (1, 3, 4):   # CHW
-            c, h, w = shape
-        elif shape[2] in (1, 3, 4): # HWC
-            h, w, c = shape
+        if len(shape) == 3:
+            if shape[0] in (1, 3, 4):   # CHW
+                c, h, w = shape
+            elif shape[2] in (1, 3, 4): # HWC
+                h, w, c = shape
         else:
-            # 兜底：按 HWC 处理
-            h, w, c = shape
+            c = 1
+            h, w = shape
 
         self.in_channels = c
 
@@ -100,6 +97,9 @@ class CustomResNet(BaseFeaturesExtractor):
         # 若仍是 HWC，则仅在需要时转为 CHW。
         if observations.dim() == 4 and observations.shape[1] != self.in_channels and observations.shape[-1] == self.in_channels:
             observations = observations.permute(0, 3, 1, 2).contiguous()
+
+        if observations.dim() == 3:
+            observations = observations.unsqueeze(1)
 
         features = self.conv_net(observations)
         return self.dense_net(features)
