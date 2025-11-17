@@ -16,5 +16,5 @@ gaussian_kernel = torch.tensor(create_gaussian_kernel(16, sigma=4), dtype=torch.
 def gamearea_abstract(gamescreen):
     reshaped = gamescreen.unfold(0, 16, 16).unfold(1, 16, 16)
     pooled = (reshaped * gaussian_kernel).sum(dim=(-1, -2))
-    pooled_int8 = pooled.clamp(0, 255).to(torch.uint8)
+    pooled_int8 = pooled.clamp(0, 255).to(torch.uint8)  # 限制范围在 0-255，并转换为 uint8
     return pooled_int8

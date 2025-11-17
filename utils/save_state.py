@@ -4,8 +4,8 @@ from pynput import keyboard
 import time
 
 pyboy = PyBoy("game_state/Link's awakening.gb")
-load_state = "game_state/Room_51.state"
-save_state = "game_state/Room51_task1.state"
+load_state = "game_state/Room_58.state"
+save_state = "game_state/Room58_task1.state"
 
 try:
     with open(load_state, "rb") as f:
@@ -47,8 +47,10 @@ try:
         if not running:
             break
         pyboy.tick()
-        link = pyboy.get_sprite(2)
-        print(f"Link Position: x={link.x}, y={link.y}")
+        if i % 100 == 0:
+            link = pyboy.get_sprite(2)
+            print(f"Link Position: x={link.x}, y={link.y}")
+            print(f"current room: {pyboy.memory[0xDBAE]}")
         time.sleep(0.01)
 finally:
     listener.stop()

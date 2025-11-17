@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch
 
 from envs.base_env import BaseEnv
-from envs.env59_01 import Room59_Task1_Env as Zelda_Env
+from RL.envs.env58_02 import Room59_Task1_Env as Zelda_Env
 from PPO.model import CustomResNet, CustomACPolicy, CustomPPO, TQDMProgressBar
 
 import imageio

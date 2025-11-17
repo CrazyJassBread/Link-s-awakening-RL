@@ -3,9 +3,14 @@ from pyboy import PyBoy
 import numpy as np
 import matplotlib.pyplot as plt
 from pynput import keyboard
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from screen_abstract import gamearea_abstract
+
 
 pyboy = PyBoy("game_state/Link's awakening.gb")
-load_state = "game_state/Room51_task1.state"
+load_state = "game_state/Room58_task1.state"
 
 try:
     with open(load_state, "rb") as f:
@@ -34,26 +39,38 @@ listener.start()
 # 准备matplotlib实时显示
 plt.ion()
 fig, ax = plt.subplots()
-image_data = np.zeros((20, 20)) 
+image_data = np.zeros((8, 10)) 
 img = ax.imshow(image_data, cmap='gray', vmin=0, vmax=255)
+
+# 插入数值标注
+text_annotations = []
+for i in range(image_data.shape[0]):
+    row_annotations = []
+    for j in range(image_data.shape[1]):
+        text = ax.text(j, i, f"{image_data[i, j]:.1f}", ha="center", va="center", color="red", fontsize=8)
+        row_annotations.append(text)
+    text_annotations.append(row_annotations)
+
 plt.show()
 
-# 阈值划分成三类
-thresholds = [85, 170]
-np.set_printoptions(threshold=np.inf, linewidth=200, suppress=True)
+def _get_obs(pyboy):
+    screen_tensor = torch.tensor(pyboy.screen.ndarray[:128, :160, 0], dtype=torch.float32)
+    pooled = gamearea_abstract(screen_tensor)
+    return pooled
 
-for i in range(10000):
+for k in range(100000):
     if not running:
         break
     pyboy.tick()
-    game_matrix = pyboy.game_area()
-    sub_matrix = game_matrix[:20,:20]
-    labels = np.digitize(sub_matrix, thresholds)
-    quantized = np.array([0, 128, 255])[labels]
-    if i % 100 == 0:
-        count = np.count_nonzero(labels == 0)
-        # print((count - 1)//4)
-    img.set_data(sub_matrix)
+    sub_screen = _get_obs(pyboy)
+    # game_matrix = pyboy.game_area()
+    # sub_matrix = game_matrix[:20,:20]
+    img.set_data(sub_screen)
+
+    for i in range(sub_screen.shape[0]):
+        for j in range(sub_screen.shape[1]):
+            text_annotations[i][j].set_text(f"{sub_screen[i, j]:.1f}")
+
     plt.draw()
     plt.pause(0.001)
 
