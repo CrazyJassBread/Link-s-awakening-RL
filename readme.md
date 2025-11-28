@@ -1,5 +1,6 @@
 # NeuroLink
 ![alt text](img/image.png)
+
 A reinforcement learning project built on the Game Boy emulator PyBoy to train agents to solve rooms in "The Legend of Zelda: Link’s Awakening". The repo includes custom Gym-style environments, training/testing scripts, state management utilities, and tools to record gameplay GIFs.
 
 
