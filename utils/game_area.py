@@ -10,7 +10,7 @@ from screen_abstract import gamearea_abstract
 
 
 pyboy = PyBoy("game_state/Link's awakening.gb")
-load_state = "game_state/Room58_task1.state"
+load_state = "game_state/Room58_task2.state"
 
 try:
     with open(load_state, "rb") as f:

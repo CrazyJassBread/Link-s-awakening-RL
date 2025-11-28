@@ -9,7 +9,7 @@ from pathlib import Path
 import gymnasium as gym
 from gymnasium import spaces
 from pyboy.utils import WindowEvent
-from skimage.transform import downscale_local_mean
+#from skimage.transform import downscale_local_mean
 from .screen_abstract import gamearea_abstract
 import torch
 # 通用常量
@@ -24,21 +24,20 @@ ADDR_ROOM_ID    = 0xDBAE
 ADDR_KEYS       = 0xDBD0
 
 class BaseEnv(gym.Env, ABC):
-    """
-    Zelda 抽象环境基类：封装通用流程，子类则实现具体任务逻辑
-    为什么这样封装🤔
-    因为原来的代码快成尸山了
-    """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
-    def __init__(self, game_file: str, save_file: str, goal_room: int | None = None):
+    def __init__(self, game_file: str, save_file: str, goal_room: int | None = None, render_mode: str | None = None):
         super().__init__()
         self.game_file = game_file
         self.save_file = save_file
 
-        # XXX：新增test来表示是测试还是训练
-        self.test = False
-        window_mode = "SDL2" if self.test else "null"
+        self.render_mode = render_mode
+        if self.render_mode == "human":
+            window_mode = "SDL2"
+        elif self.render_mode == "rgb_array":
+            window_mode = "null"
+        else:
+            window_mode = "null"
         self.pyboy = PyBoy(game_file, sound_emulated=False, window=window_mode)
         try:
             with open(save_file, "rb") as f:
@@ -46,7 +45,6 @@ class BaseEnv(gym.Env, ABC):
         except FileNotFoundError:
             print("No existing save file, starting new game")
 
-        # 状态变量
         self.max_health = self.read_m(ADDR_MAX_HEALTH)
         self.pre_health = self.read_m(ADDR_CUR_HEALTH)
         self.cur_health = self.pre_health
@@ -91,7 +89,7 @@ class BaseEnv(gym.Env, ABC):
         # 训练计数
         self.cur_step = 0
         self.episode = 0
-        self.disable_render = True
+
 
     # Gym API 接口
     def reset(self, seed: int | None = None, options: dict | None = None):
@@ -106,7 +104,7 @@ class BaseEnv(gym.Env, ABC):
             self.pyboy.load_state(f)
         self.pyboy.tick(1)
 
-        # 通用状态
+        # 通用状态复位
         self.cur_room = self.read_m(ADDR_ROOM_ID)
         if self.goal_room is None:
             self.goal_room = self.cur_room
@@ -158,14 +156,13 @@ class BaseEnv(gym.Env, ABC):
     def _step_extra(self):
         pass
 
-    def render(self, mode: str = "human"):
-        if mode == "human" and not getattr(self, "disable_render", False):
-            self.pyboy.screen.ndarray
-        elif mode == "rgb_array":
-            frame = self.pyboy.screen.ndarray
-            return frame
+    def render(self):
+        if self.render_mode == "human":
+            pass
+        elif self.render_mode == "rgb_array":
+            return self.pyboy.screen.ndarray
         else:
-            raise ValueError(f"Unsupported render mode: {mode}")
+            return None
 
     def close(self):
         self.pyboy.stop()
