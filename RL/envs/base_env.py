@@ -39,6 +39,8 @@ class BaseEnv(gym.Env, ABC):
         else:
             window_mode = "null"
         self.pyboy = PyBoy(game_file, sound_emulated=False, window=window_mode)
+        if window_mode == "SDL2":
+            self.pyboy.set_emulation_speed(1) # 当渲染图像时设置为正常速度
         try:
             with open(save_file, "rb") as f:
                 self.pyboy.load_state(f)

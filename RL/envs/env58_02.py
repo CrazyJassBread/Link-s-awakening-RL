@@ -4,8 +4,8 @@ import numpy as np
 from .base_env import BaseEnv
 
 class Room58_Task2_Env(BaseEnv):
-    def __init__(self, game_file: str, save_file: str):
-        super().__init__(game_file, save_file, goal_room=58)
+    def __init__(self, game_file: str, save_file: str, render_mode: str | None = None, goal_room: int | None = 58):
+        super().__init__(game_file, save_file, goal_room=goal_room, render_mode=render_mode)
         self.turtles = self._get_monsters()
 
     def check_goal(self) -> bool:

@@ -10,9 +10,8 @@ class Room51_Task1_Env(BaseEnv):
         打开宝箱（130，40）
         获得key
     """
-
-    def __init__(self, game_file: str, save_file: str):
-        super().__init__(game_file, save_file, goal_room=51)
+    def __init__(self, game_file: str, save_file: str, render_mode: str | None = None, goal_room: int | None = 51):
+        super().__init__(game_file, save_file, goal_room=goal_room, render_mode=render_mode)
         # 怪物统计的初始值
         self.slimes, self.turtles = self._get_monsters()
 
